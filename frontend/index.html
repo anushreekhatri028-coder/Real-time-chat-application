@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexusChat — Real-Time WebSocket Messaging</title>
+  <link rel="stylesheet" href="/frontend/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%22><text y=%2222%22 font-size=%2220%22>⚡</text></svg>">
+</head>
+<body class="auth-page">
+  <!-- Dynamic Glowing Background Orbs -->
+  <div class="auth-glow-1"></div>
+  <div class="auth-glow-2"></div>
+
+  <div class="auth-container">
+    <!-- Brand Header -->
+    <header class="auth-header">
+      <div class="auth-brand">
+        <div class="auth-logo-icon">⚡</div>
+        <h1 class="auth-title">NexusChat</h1>
+      </div>
+      <p class="auth-subtitle">
+        High-Performance Real-Time Messaging 
+        <span class="badge-tag">WebSocket Live</span>
+      </p>
+    </header>
+
+    <!-- Auth Card -->
+    <main class="auth-card">
+      <!-- Tabs Navigation -->
+      <nav class="auth-tabs" role="tablist">
+        <button id="tab-login-btn" class="auth-tab-btn active" onclick="switchAuthTab('login')">Sign In</button>
+        <button id="tab-register-btn" class="auth-tab-btn" onclick="switchAuthTab('register')">Create Account</button>
+      </nav>
+
+      <!-- Alert Message Box -->
+      <div id="auth-alert" style="display: none; padding: 10px 14px; margin-bottom: 16px; border-radius: 8px; font-size: 13px;"></div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form active" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="login-identifier">Username or Email</label>
+          <div class="input-wrapper">
+            <span class="input-icon">👤</span>
+            <input type="text" id="login-identifier" class="form-control" placeholder="e.g. alex or alex@demo.chat" required autocomplete="username">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="login-password" class="form-control" placeholder="Enter your password" required autocomplete="current-password">
+          </div>
+        </div>
+
+        <button type="submit" id="login-submit-btn" class="btn-primary">
+          <span>Sign In to Nexus</span>
+          <span>→</span>
+        </button>
+      </form>
+
+      <!-- Registration Form -->
+      <form id="register-form" class="auth-form" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label for="reg-username">Username</label>
+          <div class="input-wrapper">
+            <span class="input-icon">@</span>
+            <input type="text" id="reg-username" class="form-control" placeholder="e.g. dev_guru" required minlength="3" maxlength="25">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-display-name">Display Name</label>
+          <div class="input-wrapper">
+            <span class="input-icon">✨</span>
+            <input type="text" id="reg-display-name" class="form-control" placeholder="e.g. Maya Lin" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-email">Email Address</label>
+          <div class="input-wrapper">
+            <span class="input-icon">✉️</span>
+            <input type="email" id="reg-email" class="form-control" placeholder="e.g. maya@example.com" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-password">Password</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="reg-password" class="form-control" placeholder="Minimum 6 characters" required minlength="6">
+          </div>
+        </div>
+
+        <button type="submit" id="register-submit-btn" class="btn-primary">
+          <span>Create Free Account</span>
+          <span>🚀</span>
+        </button>
+      </form>
+
+      <!-- Quick 1-Click Demo Accounts -->
+      <div class="auth-divider">Instant Demo Logins</div>
+      <div class="demo-users-grid">
+        <button type="button" class="demo-user-btn" onclick="quickFillDemo('alex', 'password123')">
+          <div class="demo-avatar" style="background: #6366f1;">A</div>
+          <div class="demo-user-info">
+            <span class="demo-user-name">Alex Rivers</span>
+            <span class="demo-user-role">Full-Stack Dev</span>
+          </div>
+        </button>
+
+        <button type="button" class="demo-user-btn" onclick="quickFillDemo('sarah', 'password123')">
+          <div class="demo-avatar" style="background: #ec4899;">S</div>
+          <div class="demo-user-info">
+            <span class="demo-user-name">Sarah Chen</span>
+            <span class="demo-user-role">UI/UX Designer</span>
+          </div>
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script>
+    function switchAuthTab(mode) {
+      const loginTab = document.getElementById('tab-login-btn');
+      const registerTab = document.getElementById('tab-register-btn');
+      const loginForm = document.getElementById('login-form');
+      const registerForm = document.getElementById('register-form');
+      const alertBox = document.getElementById('auth-alert');
+      alertBox.style.display = 'none';
+
+      if (mode === 'login') {
+        loginTab.classList.add('active');
+        registerTab.classList.remove('active');
+        loginForm.classList.add('active');
+        registerForm.classList.remove('active');
+      } else {
+        registerTab.classList.add('active');
+        loginTab.classList.remove('active');
+        registerForm.classList.add('active');
+        loginForm.classList.remove('active');
+      }
+    }
+
+    function showAlert(message, isError = true) {
+      const alertBox = document.getElementById('auth-alert');
+      alertBox.style.display = 'block';
+      alertBox.textContent = message;
+      if (isError) {
+        alertBox.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+        alertBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        alertBox.style.color = '#fca5a5';
+      } else {
+        alertBox.style.backgroundColor = 'rgba(16, 185, 129, 0.15)';
+        alertBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+        alertBox.style.color = '#6ee7b7';
+      }
+    }
+
+    function quickFillDemo(identifier, password) {
+      switchAuthTab('login');
+      document.getElementById('login-identifier').value = identifier;
+      document.getElementById('login-password').value = password;
+      // Auto submit for convenience
+      document.getElementById('login-submit-btn').click();
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const identifier = document.getElementById('login-identifier').value.trim();
+      const password = document.getElementById('login-password').value;
+      const submitBtn = document.getElementById('login-submit-btn');
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>Authenticating...</span>';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showAlert('Login successful! Redirecting to chat...', false);
+          setTimeout(() => { window.location.href = '/chat'; }, 500);
+        } else {
+          showAlert(data.error || 'Login failed. Please check credentials.');
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>Sign In to Nexus</span><span>→</span>';
+        }
+      } catch (err) {
+        showAlert('Network error. Make sure the backend server is running.');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Sign In to Nexus</span><span>→</span>';
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const username = document.getElementById('reg-username').value.trim();
+      const display_name = document.getElementById('reg-display-name').value.trim();
+      const email = document.getElementById('reg-email').value.trim();
+      const password = document.getElementById('reg-password').value;
+      const submitBtn = document.getElementById('register-submit-btn');
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>Creating Account...</span>';
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, display_name, email, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showAlert('Account created! Entering chat...', false);
+          setTimeout(() => { window.location.href = '/chat'; }, 500);
+        } else {
+          showAlert(data.error || 'Registration failed.');
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>Create Free Account</span><span>🚀</span>';
+        }
+      } catch (err) {
+        showAlert('Network error. Please try again.');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Create Free Account</span><span>🚀</span>';
+      }
+    }
+  </script>
+</body>
+</html>

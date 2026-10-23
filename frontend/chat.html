@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexusChat — Real-Time Channels & Direct Messages</title>
+  <link rel="stylesheet" href="/frontend/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%22><text y=%2222%22 font-size=%2220%22>💬</text></svg>">
+</head>
+<body>
+  <div class="chat-app-layout">
+    <!-- ====================================================================
+         Left Navigation Sidebar
+         ==================================================================== -->
+    <aside class="chat-sidebar" id="sidebar">
+      <!-- Sidebar Header -->
+      <div class="sidebar-header">
+        <div class="sidebar-brand">
+          <div class="sidebar-brand-icon">⚡</div>
+          <span class="sidebar-brand-title">NexusChat</span>
+        </div>
+        <div class="connection-pill" id="connection-pill" title="WebSocket status">
+          <span class="connection-dot"></span>
+          <span id="connection-text">Live</span>
+        </div>
+      </div>
+
+      <!-- Scrollable Channels & DMs list -->
+      <div class="sidebar-content">
+        <!-- Channels Section -->
+        <div>
+          <div class="sidebar-section-title">
+            <span>Channels</span>
+            <button class="sidebar-add-btn" onclick="openCreateChannelModal()" title="Create Channel">+</button>
+          </div>
+          <div class="channel-list" id="channel-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Direct Messages Section -->
+        <div>
+          <div class="sidebar-section-title">
+            <span>Direct Messages</span>
+          </div>
+          <div class="dm-list" id="dm-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Current User Profile Footer -->
+      <footer class="sidebar-user-footer">
+        <div class="footer-user-card" onclick="openProfileModal()">
+          <div class="avatar-wrapper">
+            <div class="user-avatar" id="footer-user-avatar">?</div>
+            <span class="status-indicator status-online" id="footer-user-status-indicator"></span>
+          </div>
+          <div class="footer-user-details">
+            <span class="footer-user-name" id="footer-user-name">Loading...</span>
+            <span class="footer-user-status" id="footer-user-status-text">Online</span>
+          </div>
+        </div>
+
+        <div class="footer-actions">
+          <button class="btn-icon-footer" onclick="toggleUserStatusMenu(event)" title="Change Presence Status">
+            <span>🟢</span>
+          </button>
+          <button class="btn-icon-footer" onclick="handleLogout()" title="Log Out">
+            <span>🚪</span>
+          </button>
+        </div>
+      </footer>
+    </aside>
+
+    <!-- ====================================================================
+         Main Chat Section
+         ==================================================================== -->
+    <main class="chat-main">
+      <!-- Chat Header Bar -->
+      <header class="chat-header">
+        <div class="header-left">
+          <button class="mobile-menu-btn" onclick="toggleMobileSidebar()" title="Toggle Menu">☰</button>
+          <div class="room-title-wrapper">
+            <div class="room-title" id="room-header-title">
+              <span id="room-header-icon">#</span>
+              <span id="room-header-name">general</span>
+            </div>
+            <div class="room-desc" id="room-header-desc">Welcome lobby! Say hi and talk about anything.</div>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- Real-Time Search / Filter Messages -->
+          <div class="header-search">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="message-search-input" placeholder="Search in room..." oninput="handleSearchMessages(this.value)">
+          </div>
+
+          <!-- Sound Effects Toggle -->
+          <button class="header-tool-btn active" id="sound-toggle-btn" onclick="toggleSound()" title="Audio Notifications On/Off">
+            <span id="sound-icon">🔔</span>
+          </button>
+
+          <!-- Toggle Right Panel (Members/Info) -->
+          <button class="header-tool-btn" id="right-panel-toggle-btn" onclick="toggleRightPanel()" title="Channel Members & Info">
+            <span>👥</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Scrollable Message Stream -->
+      <section class="messages-container" id="messages-container">
+        <!-- Room Welcome Banner -->
+        <div class="room-hero-card" id="room-hero-card">
+          <div class="room-hero-icon" id="hero-room-icon">💬</div>
+          <div class="room-hero-content">
+            <h3 id="hero-room-name">Welcome to #general!</h3>
+            <p id="hero-room-desc">This is the start of the general channel. Send a message to get the conversation started.</p>
+          </div>
+        </div>
+
+        <!-- Dynamic Message Feed -->
+        <div id="messages-feed" style="display: flex; flex-direction: column; gap: 14px;"></div>
+      </section>
+
+      <!-- Floating Scroll-to-Bottom Pill -->
+      <button class="scroll-bottom-btn" id="scroll-bottom-btn" onclick="scrollToBottom(true)">
+        <span>↓ New messages below</span>
+      </button>
+
+      <!-- Typing Indicator Row -->
+      <div class="typing-bar" id="typing-indicator" style="visibility: hidden;">
+        <div class="typing-dots">
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+        </div>
+        <span id="typing-text">Someone is typing...</span>
+      </div>
+
+      <!-- Bottom Chat Input Box -->
+      <div class="chat-input-wrapper">
+        <div class="input-box-container">
+          <!-- Attachment Preview Bar (shown when file is selected) -->
+          <div class="attachment-preview-bar" id="attachment-preview-bar">
+            <img id="attachment-preview-img" class="attachment-thumb" src="" alt="preview" style="display: none;">
+            <span id="attachment-preview-name" class="attachment-name">attachment.png</span>
+            <button class="remove-attachment-btn" onclick="removePendingAttachment()" title="Remove file">✕</button>
+          </div>
+
+          <!-- Textarea Row -->
+          <div class="input-textarea-row">
+            <textarea
+              id="chat-textarea"
+              class="chat-textarea"
+              rows="1"
+              placeholder="Message #general... (Enter to send, Shift+Enter for new line)"
+              onkeydown="handleKeyDown(event)"
+              oninput="handleTypingInput(event)"
+            ></textarea>
+          </div>
+
+          <!-- Bottom Tools Row -->
+          <div class="input-actions-row">
+            <div class="input-tools-left">
+              <!-- Emoji Picker Button -->
+              <button class="input-tool-btn" id="emoji-trigger-btn" onclick="toggleEmojiPicker(event)" title="Add Emoji">
+                😀
+              </button>
+
+              <!-- File Upload Attachment Button -->
+              <input type="file" id="file-upload-input" style="display: none;" onchange="handleFileUpload(event)">
+              <button class="input-tool-btn" onclick="document.getElementById('file-upload-input').click()" title="Attach File / Image">
+                📎
+              </button>
+
+              <!-- Quick Bot Command Shortcut -->
+              <button class="input-tool-btn" onclick="insertBotCommand()" title="Ask Nova Bot (/help)">
+                🤖
+              </button>
+            </div>
+
+            <button class="send-btn" id="send-msg-btn" onclick="sendMessage()">
+              <span>Send</span>
+              <span>⚡</span>
+            </button>
+          </div>
+
+          <!-- Emoji Popover -->
+          <div class="emoji-popover" id="emoji-popover">
+            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Quick Emojis</div>
+            <div class="emoji-grid" id="emoji-grid">
+              <!-- Dynamically populated or rendered -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ====================================================================
+         Right Sidebar Panel (Members & Room Info)
+         ==================================================================== -->
+    <aside class="chat-right-panel" id="right-panel">
+      <div class="panel-header">
+        <span>Channel Info</span>
+        <button class="btn-icon-footer" onclick="toggleRightPanel()">✕</button>
+      </div>
+
+      <div class="panel-content">
+        <!-- Room Details Card -->
+        <div style="background: var(--bg-card); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <div style="font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 6px;" id="panel-room-name"># general</div>
+          <div style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.4;" id="panel-room-desc">Welcome lobby! Say hi and talk about anything.</div>
+        </div>
+
+        <!-- Online Members -->
+        <div>
+          <div class="panel-section-title">
+            <span>Online — <span id="online-count">0</span></span>
+          </div>
+          <div class="member-list" id="online-members-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Offline Members -->
+        <div>
+          <div class="panel-section-title">
+            <span>Offline — <span id="offline-count">0</span></span>
+          </div>
+          <div class="member-list" id="offline-members-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ====================================================================
+       Modals: Create Channel & User Profile
+       ==================================================================== -->
+
+  <!-- Create Channel Modal -->
+  <div class="modal-overlay" id="create-channel-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Create New Channel</h3>
+        <button class="modal-close-btn" onclick="closeCreateChannelModal()">✕</button>
+      </div>
+      <form onsubmit="handleCreateChannel(event)">
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label>Channel Name</label>
+          <div class="input-wrapper">
+            <span class="input-icon">#</span>
+            <input type="text" id="new-channel-name" class="form-control" placeholder="e.g. project-updates" required>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label>Topic / Description</label>
+          <input type="text" id="new-channel-desc" class="form-control" placeholder="What is this channel about?" style="padding-left: 14px;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label>Channel Icon</label>
+          <div class="icon-selector-row" id="icon-selector-row">
+            <button type="button" class="icon-option-btn selected" onclick="selectChannelIcon(this, '💬')">💬</button>
+            <button type="button" class="icon-option-btn" onclick="selectChannelIcon(this, '💻')">💻</button>
+            <button type="button" class="icon-option-btn" onclick="selectChannelIcon(this, '🚀')">🚀</button>
+            <button type="button" class="icon-option-btn" onclick="selectChannelIcon(this, '🎮')">🎮</button>
+            <button type="button" class="icon-option-btn" onclick="selectChannelIcon(this, '🎨')">🎨</button>
+            <button type="button" class="icon-option-btn" onclick="selectChannelIcon(this, '📢')">📢</button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary" style="width: 100%;">Create Channel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- User Profile Modal -->
+  <div class="modal-overlay" id="user-profile-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">User Profile</h3>
+        <button class="modal-close-btn" onclick="closeProfileModal()">✕</button>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 14px; margin-bottom: 20px;">
+        <div class="user-avatar" id="modal-avatar" style="width: 68px; height: 68px; font-size: 26px;">?</div>
+        <div style="text-align: center;">
+          <h4 id="modal-display-name" style="font-size: 18px; font-weight: 700; color: #fff;">User Name</h4>
+          <span id="modal-username" style="font-size: 13px; color: var(--text-muted);">@username</span>
+        </div>
+        <p id="modal-bio" style="font-size: 13.5px; color: var(--text-secondary); text-align: center; max-width: 320px; line-height: 1.5;"></p>
+      </div>
+      <div style="border-top: 1px solid var(--border-subtle); padding-top: 16px; display: flex; justify-content: flex-end;">
+        <button type="button" class="btn-primary" onclick="closeProfileModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Socket.IO CDN -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- Application Client Logic -->
+  <script src="/frontend/script.js"></script>
+</body>
+</html>

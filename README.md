@@ -11,10 +11,11 @@ As specified in the design architecture:
 ```text
 real-time-chat-app/
 ├── backend/
-│   ├── app.py            # Flask server, REST APIs, and Socket.IO event handlers
-│   ├── database.py       # SQLite connection, schema initialization & CRUD queries
-│   ├── auth.py           # Registration, login, password hashing, and session management
-│   └── requirements.txt  # Python dependencies
+│   ├── app.py              # Flask server, REST APIs, and Socket.IO event handlers
+│   ├── database.py         # SQLite connection, schema initialization & CRUD queries
+│   ├── auth.py             # Registration, login, password hashing, and session management
+│   ├── moderation.py       # Automated profanity filter & content sanitization logic
+│   └── requirements.txt    # Python dependencies
 ├── frontend/
 │   ├── index.html        # Authentication & landing page (Login / Register)
 │   ├── chat.html         # Full-featured chat workspace interface
@@ -103,3 +104,9 @@ python console_client.py
 
 6. **SQLite Persistence (`chat.db`)**:
    - Robust relational schema with foreign keys for `users`, `rooms`, `messages`, and `reactions`.
+   
+7. **Automated Content Moderation**:
+   - Integrated custom profanity filter (`backend/moderation.py`) that intercepts incoming messages, checks against prohibited terms, and automatically censors bad words (`****`) before database storage and live broadcast.
+
+8. **Real-Time Typing Indicator**:
+   - Interactive typing state updates using client-side debouncing and WebSockets, rendering animated typing indicators (`[User] is typing...`) across online clients.

@@ -984,3 +984,74 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 300);
   }, 3500);
 }
+
+// --- Feature 2: Client-side Typing Indicator Logic ---
+const messageInput = document.getElementById('message-input');
+let typingTimeout;
+
+if (messageInput) {
+    messageInput.addEventListener('input', () => {
+        const currentUsername = localStorage.getItem('username') || 'Someone';
+        const currentRoomId = window.activeRoomId || 1; // Current selected room
+
+        // Emit typing = true event to server
+        socket.emit('typing', {
+            room_id: currentRoomId,
+            username: currentUsername,
+            is_typing: true
+        });
+
+        // Debounce: 1.5 seconds tak quiet hone par typing status off kar do
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            socket.emit('typing', {
+                room_id: currentRoomId,
+                username: currentUsername,
+                is_typing: false
+            });
+        }, 1500);
+    });
+}
+
+// --- Client-side Typing Indicator Logic ---
+const messageInput = document.getElementById('message-input');
+let typingTimeout;
+
+if (messageInput) {
+    messageInput.addEventListener('input', () => {
+        const currentUsername = localStorage.getItem('username') || 'Someone';
+        const currentRoomId = window.activeRoomId || 1;
+
+        // Emit typing event
+        socket.emit('typing', {
+            room_id: currentRoomId,
+            username: currentUsername,
+            is_typing: true
+        });
+
+        // Clear indicator after 1.5s of inactivity
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            socket.emit('typing', {
+                room_id: currentRoomId,
+                username: currentUsername,
+                is_typing: false
+            });
+        }, 1500);
+    });
+}
+
+// Server se aaye typing notification ko render karna
+socket.on('display_typing', (data) => {
+    const typingBar = document.getElementById('typing-indicator');
+    const typingText = document.getElementById('typing-text');
+    
+    if (typingBar && typingText) {
+        if (data.is_typing) {
+            typingText.innerText = `${data.username} is typing...`;
+            typingBar.style.visibility = 'visible';
+        } else {
+            typingBar.style.visibility = 'hidden';
+        }
+    }
+});

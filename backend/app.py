@@ -3,6 +3,7 @@ Flask application and WebSocket server for the Real-Time Chat Application.
 Manages HTTP API routes, static asset delivery, and Socket.IO events for live messaging.
 """
 
+    
 import os
 import random
 import time
@@ -19,6 +20,44 @@ from flask import (
 )
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.utils import secure_filename
+from moderation import sanitize_message
+
+# Flask App aur SocketIO Initialization
+app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Typing status track karne ke liye event handlers
+@socketio.on('typing')
+def handle_typing(data):
+   
+    """
+    Broadcasts typing indicator to other clients in the same room.
+    """
+    room_id = data.get('room_id')
+    username = data.get('username')
+    is_typing = data.get('is_typing', False)
+    
+    emit('display_typing', {
+        'username': username,
+        'is_typing': is_typing
+    }, room=room_id, include_self=False)
+
+
+# Message event handler ko update karein moderation ke saath
+@socketio.on('send_message')
+def handle_send_message(data):
+    room_id = data.get('room_id')
+    sender_id = data.get('sender_id')
+    raw_content = data.get('content', '')
+    
+    # --- Feature 1: Content Moderation ---
+    cleaned_content, was_censored = sanitize_message(raw_content)
+    
+    # Database mein clean content save karein
+    msg = save_message(room_id, sender_id, cleaned_content)
+    
+    # Broadcast sanitized message
+    emit('receive_message', msg, room=room_id)
 
 # Local modules
 from database import (

@@ -1,14 +1,14 @@
 """
-Flask application and WebSocket server for the Real-Time Chat Application.
-Manages HTTP API routes, static asset delivery, and Socket.IO events for live messaging.
+Flask application and WebSocket server for NexusChat.
+Manages HTTP API routes, static asset delivery, and Socket.IO events.
 """
 
-    
 import os
 import random
 import time
 import threading
 from collections import defaultdict
+
 from flask import (
     Flask,
     request,
@@ -16,48 +16,11 @@ from flask import (
     session,
     send_from_directory,
     redirect,
-    url_for
 )
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.utils import secure_filename
+
 from moderation import sanitize_message
-
-# Flask App aur SocketIO Initialization
-app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
-
-# Typing status track karne ke liye event handlers
-@socketio.on('typing')
-def handle_typing(data):
-   
-    """
-    Broadcasts typing indicator to other clients in the same room.
-    """
-    room_id = data.get('room_id')
-    username = data.get('username')
-    is_typing = data.get('is_typing', False)
-    
-    emit('display_typing', {
-        'username': username,
-        'is_typing': is_typing
-    }, room=room_id, include_self=False)
-
-
-# Message event handler ko update karein moderation ke saath
-@socketio.on('send_message')
-def handle_send_message(data):
-    room_id = data.get('room_id')
-    sender_id = data.get('sender_id')
-    raw_content = data.get('content', '')
-    
-    # --- Feature 1: Content Moderation ---
-    cleaned_content, was_censored = sanitize_message(raw_content)
-    
-    # Database mein clean content save karein
-    msg = save_message(room_id, sender_id, cleaned_content)
-    
-    # Broadcast sanitized message
-    emit('receive_message', msg, room=room_id)
 
 # Local modules
 from database import (
@@ -72,18 +35,23 @@ from database import (
     save_message,
     get_room_messages,
     toggle_reaction,
-    get_or_create_dm_room
+    get_or_create_dm_room,
 )
+
 from auth import (
     register_user_account,
     authenticate_user,
     login_user_session,
     logout_user_session,
     get_current_user,
-    login_required
+    login_required,
 )
 
-# Base directory paths
+
+# ==============================================================================
+# Configuration
+# ==============================================================================
+
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BACKEND_DIR)
 FRONTEND_DIR = os.path.join(PROJECT_DIR, "frontend")
@@ -91,235 +59,524 @@ UPLOADS_DIR = os.path.join(PROJECT_DIR, "uploads")
 
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
-# Initialize Flask app
 app = Flask(
     __name__,
     static_folder=FRONTEND_DIR,
-    template_folder=FRONTEND_DIR
+    template_folder=FRONTEND_DIR,
 )
-app.config["SECRET_KEY"] = "super-secret-nexus-chat-key-2026-xyz!"
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB max upload
+
+# For production, set FLASK_SECRET_KEY in your environment.
+app.config["SECRET_KEY"] = os.environ.get(
+    "FLASK_SECRET_KEY",
+    "dev-only-change-this-secret-key",
+)
+
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 app.config["UPLOAD_FOLDER"] = UPLOADS_DIR
 
-# Initialize SocketIO with threading async_mode (reliable across all Python versions)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="threading",
+)
 
-# In-memory mapping of user_id -> set of active socket connection IDs (sids)
+# In-memory online-user tracking
 online_users = defaultdict(set)
-# In-memory mapping of sid -> user_id
 sid_to_user = {}
 
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "pdf", "txt", "zip"}
+ALLOWED_EXTENSIONS = {
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "pdf",
+    "txt",
+    "zip",
+}
 
 
 def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+    """Check whether a file extension is permitted."""
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+    )
 
 
-# Initialize database on module load
+# Initialize the database once.
 init_db()
 
 
 # ==============================================================================
-# HTTP Routes (Pages and Static)
+# Page Routes
 # ==============================================================================
 
 @app.route("/")
 def index():
-    """Root route: redirect to /chat if authenticated, otherwise to /login."""
-    if "user_id" in session:
+    """Redirect to chat or login."""
+    if session.get("user_id"):
         return redirect("/chat")
+
     return redirect("/login")
 
 
 @app.route("/login")
 def login_page():
-    """Serve the authentication page (index.html)."""
-    if "user_id" in session:
+    """Serve the login and registration page."""
+    if session.get("user_id"):
         return redirect("/chat")
+
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 
 @app.route("/chat")
 @login_required
 def chat_page():
-    """Serve the main chat workspace (chat.html)."""
+    """Serve the main chat page."""
     return send_from_directory(FRONTEND_DIR, "chat.html")
 
 
 @app.route("/frontend/<path:filename>")
 def serve_frontend_assets(filename):
-    """Serve static CSS, JS, and image assets from the frontend directory."""
+    """Serve frontend CSS, JavaScript, and other assets."""
     return send_from_directory(FRONTEND_DIR, filename)
 
 
 @app.route("/uploads/<path:filename>")
 def serve_uploaded_file(filename):
-    """Serve user-uploaded files and image attachments."""
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+    """Serve uploaded attachments."""
+    return send_from_directory(
+        app.config["UPLOAD_FOLDER"],
+        filename,
+    )
 
 
 # ==============================================================================
-# REST API Endpoints
+# Authentication API
 # ==============================================================================
 
 @app.route("/api/auth/register", methods=["POST"])
 def api_register():
-    """Handle new user registration."""
-    data = request.get_json() or {}
+    """Register a new user account."""
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "success": False,
+            "error": "Please send valid JSON data.",
+        }), 400
+
     username = data.get("username", "")
     email = data.get("email", "")
     password = data.get("password", "")
     display_name = data.get("display_name", "")
     bio = data.get("bio", "")
 
-    success, result = register_user_account(username, email, password, display_name, bio)
-    if not success:
-        return jsonify({"success": False, "error": result}), 400
+    # Validate input types before passing them to the auth module.
+    if not all(
+        isinstance(value, str)
+        for value in (username, email, password, display_name, bio)
+    ):
+        return jsonify({
+            "success": False,
+            "error": "All registration fields must contain text.",
+        }), 400
 
-    login_user_session(result)
-    return jsonify({"success": True, "user": result}), 201
+    try:
+        success, result = register_user_account(
+            username,
+            email,
+            password,
+            display_name,
+            bio,
+        )
+
+        if not success:
+            return jsonify({
+                "success": False,
+                "error": result,
+            }), 400
+
+        # Log in the user after successful registration.
+        login_user_session(result)
+
+        # Do not return the password or password hash to the browser.
+        safe_user = {
+            key: value
+            for key, value in result.items()
+            if key not in {"password", "password_hash"}
+        }
+
+        return jsonify({
+            "success": True,
+            "user": safe_user,
+        }), 201
+
+    except Exception:
+        app.logger.exception("Registration failed")
+
+        return jsonify({
+            "success": False,
+            "error": "Registration failed because of a server error.",
+        }), 500
 
 
 @app.route("/api/auth/login", methods=["POST"])
 def api_login():
-    """Handle user login."""
-    data = request.get_json() or {}
+    """Authenticate an existing user."""
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "success": False,
+            "error": "Please send valid JSON data.",
+        }), 400
+
     identifier = data.get("identifier", "")
     password = data.get("password", "")
 
-    success, result = authenticate_user(identifier, password)
-    if not success:
-        return jsonify({"success": False, "error": result}), 401
+    if not isinstance(identifier, str) or not isinstance(password, str):
+        return jsonify({
+            "success": False,
+            "error": "Username/email and password must be text.",
+        }), 400
 
-    login_user_session(result)
-    return jsonify({"success": True, "user": result})
+    try:
+        success, result = authenticate_user(identifier, password)
+
+        if not success:
+            return jsonify({
+                "success": False,
+                "error": result,
+            }), 401
+
+        login_user_session(result)
+
+        safe_user = {
+            key: value
+            for key, value in result.items()
+            if key not in {"password", "password_hash"}
+        }
+
+        return jsonify({
+            "success": True,
+            "user": safe_user,
+        }), 200
+
+    except Exception:
+        app.logger.exception("Login failed")
+
+        return jsonify({
+            "success": False,
+            "error": "Login failed because of a server error.",
+        }), 500
 
 
 @app.route("/api/auth/logout", methods=["POST"])
 def api_logout():
-    """Handle user logout."""
+    """Log out the current user."""
     logout_user_session()
-    return jsonify({"success": True, "message": "Logged out successfully."})
+
+    return jsonify({
+        "success": True,
+        "message": "Logged out successfully.",
+    })
 
 
 @app.route("/api/auth/me", methods=["GET"])
 def api_me():
-    """Return currently logged-in user details."""
+    """Return the currently authenticated user's information."""
     user = get_current_user()
-    if not user:
-        return jsonify({"authenticated": False}), 401
-    return jsonify({"authenticated": True, "user": user})
 
+    if not user:
+        return jsonify({
+            "authenticated": False,
+        }), 401
+
+    safe_user = {
+        key: value
+        for key, value in user.items()
+        if key not in {"password", "password_hash"}
+    }
+
+    return jsonify({
+        "authenticated": True,
+        "user": safe_user,
+    }), 200
+
+
+# ==============================================================================
+# Rooms / Channels API
+# ==============================================================================
 
 @app.route("/api/rooms", methods=["GET"])
 @login_required
 def api_get_rooms():
-    """List all public channels."""
+    """Return all available chat rooms."""
     rooms = get_all_rooms()
-    return jsonify({"success": True, "rooms": rooms})
+
+    return jsonify({
+        "success": True,
+        "rooms": rooms,
+    })
 
 
 @app.route("/api/rooms", methods=["POST"])
 @login_required
 def api_create_room():
-    """Create a new public channel."""
-    data = request.get_json() or {}
-    name = data.get("name", "").strip()
-    description = data.get("description", "").strip()
-    icon = data.get("icon", "#").strip()
+    """Create a public chat channel."""
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "success": False,
+            "error": "Please send valid JSON data.",
+        }), 400
+
+    name = data.get("name", "")
+    description = data.get("description", "")
+    icon = data.get("icon", "#")
+
+    if not all(
+        isinstance(value, str)
+        for value in (name, description, icon)
+    ):
+        return jsonify({
+            "success": False,
+            "error": "Channel fields must contain text.",
+        }), 400
+
+    name = name.strip()
+    description = description.strip()
+    icon = icon.strip() or "#"
 
     if not name:
-        return jsonify({"success": False, "error": "Channel name is required."}), 400
+        return jsonify({
+            "success": False,
+            "error": "Channel name is required.",
+        }), 400
 
-    room = create_room(name, description, icon, is_private=0)
-    if not room:
-        return jsonify({"success": False, "error": "Channel name already exists or is invalid."}), 400
+    try:
+        room = create_room(
+            name,
+            description,
+            icon,
+            is_private=0,
+        )
 
-    # Notify all users of new channel creation
-    socketio.emit("new_channel_created", room)
-    return jsonify({"success": True, "room": room}), 201
+        if not room:
+            return jsonify({
+                "success": False,
+                "error": "Channel name already exists or is invalid.",
+            }), 400
 
+        socketio.emit("new_channel_created", room)
+
+        return jsonify({
+            "success": True,
+            "room": room,
+        }), 201
+
+    except Exception:
+        app.logger.exception("Channel creation failed")
+
+        return jsonify({
+            "success": False,
+            "error": "Could not create the channel.",
+        }), 500
+
+
+# ==============================================================================
+# Users API
+# ==============================================================================
 
 @app.route("/api/users", methods=["GET"])
 @login_required
 def api_get_users():
-    """List all registered users along with their real-time presence status."""
+    """Return registered users with their current online status."""
     users = get_all_users()
-    for u in users:
-        # Check active socket connections for real-time presence
-        if len(online_users.get(u["id"], set())) > 0:
-            u["status"] = "online"
-        else:
-            u["status"] = "offline"
-    return jsonify({"success": True, "users": users})
 
+    for user in users:
+        if online_users.get(user["id"]):
+            user["status"] = "online"
+        else:
+            user["status"] = "offline"
+
+    return jsonify({
+        "success": True,
+        "users": users,
+    })
+
+
+# ==============================================================================
+# Message History API
+# ==============================================================================
 
 @app.route("/api/messages/<int:room_id>", methods=["GET"])
 @login_required
 def api_get_messages(room_id):
-    """Retrieve message history for a specific room."""
+    """Retrieve messages for a particular room."""
     limit = request.args.get("limit", 60, type=int)
+    limit = max(1, min(limit, 100))
+
     room = get_room_by_id(room_id)
+
     if not room:
-        return jsonify({"success": False, "error": "Room not found."}), 404
+        return jsonify({
+            "success": False,
+            "error": "Room not found.",
+        }), 404
 
-    messages = get_room_messages(room_id, limit=limit)
-    return jsonify({"success": True, "room": room, "messages": messages})
+    messages = get_room_messages(
+        room_id,
+        limit=limit,
+    )
 
+    return jsonify({
+        "success": True,
+        "room": room,
+        "messages": messages,
+    })
+
+
+# ==============================================================================
+# Direct Messages API
+# ==============================================================================
 
 @app.route("/api/dm/<int:target_user_id>", methods=["GET"])
 @login_required
 def api_get_or_create_dm(target_user_id):
-    """Retrieve or create a 1-on-1 private direct message channel."""
+    """Retrieve or create a private conversation."""
     current_user_id = session.get("user_id")
+
     if current_user_id == target_user_id:
-        return jsonify({"success": False, "error": "Cannot open DM with yourself."}), 400
+        return jsonify({
+            "success": False,
+            "error": "You cannot open a DM with yourself.",
+        }), 400
 
     target_user = get_user_by_id(target_user_id)
+
     if not target_user:
-        return jsonify({"success": False, "error": "User not found."}), 404
+        return jsonify({
+            "success": False,
+            "error": "User not found.",
+        }), 404
 
-    room = get_or_create_dm_room(current_user_id, target_user_id)
-    # Decorate with target user details for the UI
-    room["display_name"] = target_user["display_name"]
-    room["target_user"] = target_user
-    messages = get_room_messages(room["id"], limit=60)
-    return jsonify({"success": True, "room": room, "messages": messages})
+    try:
+        room = get_or_create_dm_room(
+            current_user_id,
+            target_user_id,
+        )
 
+        if not room:
+            return jsonify({
+                "success": False,
+                "error": "Could not open the conversation.",
+            }), 500
+
+        room["display_name"] = target_user.get(
+            "display_name",
+            target_user.get("username", "User"),
+        )
+        room["target_user"] = target_user
+
+        messages = get_room_messages(
+            room["id"],
+            limit=60,
+        )
+
+        return jsonify({
+            "success": True,
+            "room": room,
+            "messages": messages,
+        })
+
+    except Exception:
+        app.logger.exception("Could not open direct message")
+
+        return jsonify({
+            "success": False,
+            "error": "Could not open the conversation.",
+        }), 500
+
+
+# ==============================================================================
+# File Upload API
+# ==============================================================================
 
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def api_upload_file():
-    """Handle media and attachment uploads for chat messages."""
+    """Upload an attachment for a chat message."""
     if "file" not in request.files:
-        return jsonify({"success": False, "error": "No file uploaded."}), 400
+        return jsonify({
+            "success": False,
+            "error": "No file uploaded.",
+        }), 400
 
     file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"success": False, "error": "Empty filename."}), 400
 
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        timestamp_prefix = f"{int(time.time())}_{random.randint(100, 999)}_"
-        saved_filename = timestamp_prefix + filename
-        file_path = os.path.join(app.config["UPLOAD_FOLDER"], saved_filename)
+    if not file or not file.filename:
+        return jsonify({
+            "success": False,
+            "error": "Please select a file.",
+        }), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({
+            "success": False,
+            "error": "File extension is not allowed.",
+        }), 400
+
+    filename = secure_filename(file.filename)
+
+    if not filename:
+        return jsonify({
+            "success": False,
+            "error": "Invalid filename.",
+        }), 400
+
+    timestamp_prefix = (
+        f"{int(time.time())}_{random.randint(100, 999)}_"
+    )
+    saved_filename = timestamp_prefix + filename
+    file_path = os.path.join(
+        app.config["UPLOAD_FOLDER"],
+        saved_filename,
+    )
+
+    try:
         file.save(file_path)
 
-        file_url = f"/uploads/{saved_filename}"
-        is_image = filename.lower().rsplit(".", 1)[1] in {"png", "jpg", "jpeg", "gif", "webp"}
+        extension = filename.rsplit(".", 1)[1].lower()
+        is_image = extension in {
+            "png",
+            "jpg",
+            "jpeg",
+            "gif",
+            "webp",
+        }
+
         return jsonify({
             "success": True,
-            "file_url": file_url,
+            "file_url": f"/uploads/{saved_filename}",
             "filename": filename,
-            "is_image": is_image
-        })
+            "is_image": is_image,
+        }), 201
 
-    return jsonify({"success": False, "error": "File extension not allowed."}), 400
+    except Exception:
+        app.logger.exception("File upload failed")
+
+        return jsonify({
+            "success": False,
+            "error": "Could not upload the file.",
+        }), 500
 
 
 # ==============================================================================
-# Bot Auto-Response Utilities
+# Nova Bot Responses
 # ==============================================================================
 
 BOT_JOKES = [
@@ -327,246 +584,476 @@ BOT_JOKES = [
     "There are only 10 types of people in the world: those who understand binary, and those who don't. 💻",
     "Why did the web developer leave the restaurant? Because of the table layout! 🍽️",
     "A SQL query walks into a bar, walks up to two tables and asks: 'Can I join you?' 🍻",
-    "How do you comfort a JavaScript bug? You console it! 😄"
+    "How do you comfort a JavaScript bug? You console it! 😄",
 ]
 
 BOT_QUOTES = [
     "“Talk is cheap. Show me the code.” — Linus Torvalds",
     "“Programs must be written for people to read, and only incidentally for machines to execute.” — Harold Abelson",
     "“First, solve the problem. Then, write the code.” — John Johnson",
-    "“Simplicity is prerequisite for reliability.” — Edsger W. Dijkstra"
+    "“Simplicity is prerequisite for reliability.” — Edsger W. Dijkstra",
 ]
 
 
 def handle_bot_interaction(room_id, message_content):
-    """Analyze incoming message and emit simulated bot response if triggered."""
-    trigger_words = ["@nova", "/bot", "/help", "/joke", "/quote", "hello bot", "hey bot"]
-    lower_content = message_content.lower()
-
-    if not any(t in lower_content for t in trigger_words):
+    """Generate a Nova Bot response when a command is detected."""
+    if not isinstance(message_content, str):
         return
 
-    # Look up Nova Bot user
+    trigger_words = [
+        "@nova",
+        "/bot",
+        "/help",
+        "/joke",
+        "/quote",
+        "hello bot",
+        "hey bot",
+    ]
+
+    lower_content = message_content.lower()
+
+    if not any(
+        trigger in lower_content
+        for trigger in trigger_words
+    ):
+        return
+
     bot_user = get_user_by_username("nova_bot")
+
     if not bot_user:
         return
 
     response_text = ""
+
     if "/joke" in lower_content or "joke" in lower_content:
-        response_text = f"🤖 **Nova Joke**: {random.choice(BOT_JOKES)}"
+        response_text = (
+            f"🤖 **Nova Joke**: {random.choice(BOT_JOKES)}"
+        )
+
     elif "/quote" in lower_content or "quote" in lower_content:
-        response_text = f"🤖 **Tech Quote**: {random.choice(BOT_QUOTES)}"
+        response_text = (
+            f"🤖 **Tech Quote**: {random.choice(BOT_QUOTES)}"
+        )
+
     elif "/help" in lower_content:
         response_text = (
             "🤖 **Nova Assistant Commands**:\n"
             "• `/joke` - Get a developer joke\n"
-            "• `/quote` - Inspire yourself with computer science quotes\n"
+            "• `/quote` - Get a computer science quote\n"
             "• `/help` - Show this menu\n"
-            "• Mention `@nova` in any message for a friendly greeting!"
+            "• Mention `@nova` for a friendly greeting!"
         )
+
     else:
         greetings = [
-            "🤖 Beep boop! Hello there! I'm Nova, your real-time assistant. Type `/help` for commands!",
-            "🤖 Greetings! Real-time WebSockets are running smoothly with 0ms lag! ⚡",
-            "🤖 At your service! Need a joke? Type `/joke` or try sharing some code snippets!"
+            "🤖 Beep boop! Hello there! I'm Nova. Type `/help` for commands!",
+            "🤖 Greetings! Real-time WebSockets are ready! ⚡",
+            "🤖 At your service! Type `/joke` or share some code!",
         ]
         response_text = random.choice(greetings)
 
     def send_bot_reply():
-        time.sleep(0.6)  # Simulate natural typing delay
-        saved_bot_msg = save_message(
-            room_id=room_id,
-            sender_id=bot_user["id"],
-            content=response_text,
-            message_type="bot"
-        )
-        socketio.emit("new_message", saved_bot_msg, to=f"room_{room_id}")
+        time.sleep(0.6)
 
-    threading.Thread(target=send_bot_reply, daemon=True).start()
+        try:
+            saved_bot_msg = save_message(
+                room_id=room_id,
+                sender_id=bot_user["id"],
+                content=response_text,
+                message_type="bot",
+            )
+
+            socketio.emit(
+                "new_message",
+                saved_bot_msg,
+                to=f"room_{room_id}",
+            )
+
+        except Exception:
+            app.logger.exception("Nova Bot reply failed")
+
+    threading.Thread(
+        target=send_bot_reply,
+        daemon=True,
+    ).start()
 
 
 # ==============================================================================
-# Socket.IO Event Handlers
+# Socket.IO Authentication and Presence
 # ==============================================================================
 
 @socketio.on("connect")
 def on_connect(auth=None):
-    """Handle client connection over WebSocket or polling."""
+    """Register an authenticated Socket.IO connection."""
     user_id = session.get("user_id")
 
-    # Support console client passing user_id or credentials in auth dictionary
-    if not user_id and isinstance(auth, dict):
-        user_id = auth.get("user_id")
+    # Authentication relies on the Flask session.
+    # Do not trust a user_id supplied by the browser.
 
     if not user_id:
-        # Guest or unauthenticated connection
         return
 
     sid = request.sid
+
     online_users[user_id].add(sid)
     sid_to_user[sid] = user_id
 
-    # Update database status
     update_user_status(user_id, "online")
 
     user_info = get_user_by_id(user_id)
-    # Broadcast status change to everyone
-    emit("user_status_change", {
-        "user_id": user_id,
-        "status": "online",
-        "user": user_info
-    }, broadcast=True)
 
-    # Send current online users list back to the newly connected socket
-    emit("online_users_list", {
-        "online_user_ids": list(online_users.keys())
-    })
+    emit(
+        "user_status_change",
+        {
+            "user_id": user_id,
+            "status": "online",
+            "user": user_info,
+        },
+        broadcast=True,
+    )
+
+    emit(
+        "online_users_list",
+        {
+            "online_user_ids": list(online_users.keys()),
+        },
+    )
 
 
 @socketio.on("disconnect")
-def on_disconnect():
-    """Handle client disconnect and update online presence."""
+def on_disconnect(reason=None):
+    """Remove a disconnected socket from online tracking."""
     sid = request.sid
     user_id = sid_to_user.pop(sid, None)
 
     if user_id and user_id in online_users:
         online_users[user_id].discard(sid)
-        if len(online_users[user_id]) == 0:
-            del online_users[user_id]
-            update_user_status(user_id, "offline")
-            emit("user_status_change", {
-                "user_id": user_id,
-                "status": "offline"
-            }, broadcast=True)
 
+        # A user may have multiple tabs open.
+        # Mark them offline only after the final connection closes.
+        if not online_users[user_id]:
+            del online_users[user_id]
+
+            update_user_status(user_id, "offline")
+
+            emit(
+                "user_status_change",
+                {
+                    "user_id": user_id,
+                    "status": "offline",
+                },
+                broadcast=True,
+            )
+
+
+# ==============================================================================
+# Socket.IO Room Events
+# ==============================================================================
 
 @socketio.on("join_room")
 def on_join_room(data):
-    """Client joins a specific channel or DM room."""
-    room_id = data.get("room_id")
-    if not room_id:
+    """Join a chat room."""
+    if not isinstance(data, dict):
+        emit("error", {"message": "Invalid room data."})
         return
 
-    room_channel = f"room_{room_id}"
-    join_room(room_channel)
+    room_id = data.get("room_id")
+
+    if (
+        not isinstance(room_id, (int, str))
+        or not str(room_id).isdigit()
+    ):
+        emit("error", {"message": "Invalid room ID."})
+        return
 
     user_id = session.get("user_id") or sid_to_user.get(request.sid)
-    user = get_user_by_id(user_id) if user_id else None
 
-    emit("room_joined", {
-        "room_id": room_id,
-        "message": f"Successfully joined room {room_id}"
-    })
+    if not user_id:
+        emit("error", {"message": "Please log in first."})
+        return
+
+    room_id = int(room_id)
+    room = get_room_by_id(room_id)
+
+    if not room:
+        emit("error", {"message": "Room not found."})
+        return
+
+    # NOTE: If your application uses private rooms, verify the
+    # user's access to that room before allowing them to join.
+    join_room(f"room_{room_id}")
+
+    emit(
+        "room_joined",
+        {
+            "room_id": room_id,
+            "message": f"Successfully joined room {room_id}",
+        },
+    )
 
 
 @socketio.on("leave_room")
 def on_leave_room(data):
-    """Client leaves a room."""
-    room_id = data.get("room_id")
-    if room_id:
-        leave_room(f"room_{room_id}")
+    """Leave a chat room."""
+    if not isinstance(data, dict):
+        return
 
+    room_id = data.get("room_id")
+
+    if (
+        isinstance(room_id, (int, str))
+        and str(room_id).isdigit()
+    ):
+        leave_room(f"room_{int(room_id)}")
+
+
+# ==============================================================================
+# Socket.IO Messaging
+# ==============================================================================
 
 @socketio.on("send_message")
 def on_send_message(data):
-    """Handle incoming message broadcast and database persistence."""
+    """Save and broadcast a new message."""
+    if not isinstance(data, dict):
+        emit("error", {"message": "Invalid message payload."})
+        return
+
     room_id = data.get("room_id")
-    content = data.get("content", "").strip()
+    content = data.get("content", "")
     message_type = data.get("message_type", "text")
-    file_url = data.get("file_url", None)
+    file_url = data.get("file_url")
+
+    if (
+        not isinstance(room_id, (int, str))
+        or not str(room_id).isdigit()
+    ):
+        emit("error", {"message": "Invalid room ID."})
+        return
+
+    room_id = int(room_id)
+
+    if not isinstance(content, str):
+        content = ""
+
+    content = content.strip()
+
+    if len(content) > 5000:
+        emit(
+            "error",
+            {
+                "message": (
+                    "Message is too long. "
+                    "Maximum length is 5000 characters."
+                )
+            },
+        )
+        return
+
+    if not isinstance(message_type, str):
+        message_type = "text"
+
+    if file_url is not None and not isinstance(file_url, str):
+        emit("error", {"message": "Invalid file attachment."})
+        return
 
     user_id = session.get("user_id") or sid_to_user.get(request.sid)
+
     if not user_id:
-        emit("error", {"message": "You must be logged in to send messages."})
+        emit(
+            "error",
+            {"message": "You must be logged in to send messages."},
+        )
         return
 
     if not content and not file_url:
         return
 
-    # Save to SQLite database
-    saved_msg = save_message(
-        room_id=room_id,
-        sender_id=user_id,
-        content=content,
-        message_type=message_type,
-        file_url=file_url
-    )
+    room = get_room_by_id(room_id)
 
-    # Broadcast message to all clients currently in the room
-    emit("new_message", saved_msg, to=f"room_{room_id}")
+    if not room:
+        emit("error", {"message": "Room not found."})
+        return
 
-    # Check for bot trigger
-    handle_bot_interaction(room_id, content)
+    # Sanitize message content before saving.
+    try:
+        if content:
+            content = sanitize_message(content)
 
+        saved_msg = save_message(
+            room_id=room_id,
+            sender_id=user_id,
+            content=content,
+            message_type=message_type,
+            file_url=file_url,
+        )
+
+        if not saved_msg:
+            emit("error", {"message": "Message could not be saved."})
+            return
+
+        emit(
+            "new_message",
+            saved_msg,
+            to=f"room_{room_id}",
+        )
+
+        if content:
+            handle_bot_interaction(room_id, content)
+
+    except Exception:
+        app.logger.exception("Sending message failed")
+
+        emit(
+            "error",
+            {"message": "Could not send the message."},
+        )
+
+
+# ==============================================================================
+# Socket.IO Typing Indicators
+# ==============================================================================
 
 @socketio.on("typing")
 def on_typing(data):
-    """Broadcast typing indicator to others in the room."""
-    room_id = data.get("room_id")
-    user_id = session.get("user_id") or sid_to_user.get(request.sid)
-    if not room_id or not user_id:
+    """Notify other room members that a user is typing."""
+    if not isinstance(data, dict):
         return
 
+    room_id = data.get("room_id")
+    user_id = session.get("user_id") or sid_to_user.get(request.sid)
+
+    if (
+        not user_id
+        or not isinstance(room_id, (int, str))
+        or not str(room_id).isdigit()
+    ):
+        return
+
+    room_id = int(room_id)
     user = get_user_by_id(user_id)
+
     if user:
-        emit("user_typing", {
-            "room_id": room_id,
-            "user_id": user_id,
-            "username": user["username"],
-            "display_name": user["display_name"]
-        }, to=f"room_{room_id}", include_self=False)
+        emit(
+            "user_typing",
+            {
+                "room_id": room_id,
+                "user_id": user_id,
+                "username": user.get("username", ""),
+                "display_name": user.get("display_name", ""),
+            },
+            to=f"room_{room_id}",
+            include_self=False,
+        )
 
 
 @socketio.on("stop_typing")
 def on_stop_typing(data):
-    """Stop typing indicator in the room."""
-    room_id = data.get("room_id")
-    user_id = session.get("user_id") or sid_to_user.get(request.sid)
-    if not room_id or not user_id:
+    """Notify other room members that typing has stopped."""
+    if not isinstance(data, dict):
         return
 
-    emit("user_stop_typing", {
-        "room_id": room_id,
-        "user_id": user_id
-    }, to=f"room_{room_id}", include_self=False)
+    room_id = data.get("room_id")
+    user_id = session.get("user_id") or sid_to_user.get(request.sid)
 
+    if (
+        not user_id
+        or not isinstance(room_id, (int, str))
+        or not str(room_id).isdigit()
+    ):
+        return
+
+    room_id = int(room_id)
+
+    emit(
+        "user_stop_typing",
+        {
+            "room_id": room_id,
+            "user_id": user_id,
+        },
+        to=f"room_{room_id}",
+        include_self=False,
+    )
+
+
+# ==============================================================================
+# Socket.IO Reactions
+# ==============================================================================
 
 @socketio.on("reaction")
 def on_reaction(data):
-    """Handle emoji reactions on messages."""
+    """Add or remove a reaction from a message."""
+    if not isinstance(data, dict):
+        return
+
     message_id = data.get("message_id")
     room_id = data.get("room_id")
     emoji = data.get("emoji")
     user_id = session.get("user_id") or sid_to_user.get(request.sid)
 
-    if not message_id or not emoji or not user_id:
+    if not all((message_id, room_id, emoji, user_id)):
         return
 
-    action, updated_reactions = toggle_reaction(message_id, user_id, emoji)
+    if (
+        not isinstance(room_id, (int, str))
+        or not str(room_id).isdigit()
+    ):
+        return
 
-    emit("reaction_updated", {
-        "message_id": message_id,
-        "room_id": room_id,
-        "reactions": updated_reactions,
-        "action": action,
-        "user_id": user_id
-    }, to=f"room_{room_id}")
+    if not isinstance(emoji, str) or len(emoji) > 32:
+        return
 
+    try:
+        action, updated_reactions = toggle_reaction(
+            message_id,
+            user_id,
+            emoji,
+        )
+
+        emit(
+            "reaction_updated",
+            {
+                "message_id": message_id,
+                "room_id": int(room_id),
+                "reactions": updated_reactions,
+                "action": action,
+                "user_id": user_id,
+            },
+            to=f"room_{int(room_id)}",
+        )
+
+    except Exception:
+        app.logger.exception("Reaction update failed")
+        emit("error", {"message": "Could not update reaction."})
+
+
+# ==============================================================================
+# Socket.IO Status Updates
+# ==============================================================================
 
 @socketio.on("status_update")
 def on_status_update(data):
-    """Allow user to explicitly set status (online, away, busy)."""
+    """Update a user's presence status."""
+    if not isinstance(data, dict):
+        return
+
     status = data.get("status", "online")
+
     if status not in {"online", "away", "busy"}:
         status = "online"
 
     user_id = session.get("user_id") or sid_to_user.get(request.sid)
+
     if user_id:
         update_user_status(user_id, status)
-        emit("user_status_change", {
-            "user_id": user_id,
-            "status": status
-        }, broadcast=True)
+
+        emit(
+            "user_status_change",
+            {
+                "user_id": user_id,
+                "status": status,
+            },
+            broadcast=True,
+        )
 
 
 # ==============================================================================
@@ -575,14 +1062,23 @@ def on_status_update(data):
 
 if __name__ == "__main__":
     import sys
-    if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(
+            encoding="utf-8",
+            errors="replace",
+        )
+
     print("=" * 60)
     print("  NexusChat Real-Time Server starting...")
     print("  Web Interface: http://localhost:5000")
     print("  Channels available: #general, #tech-talk, #random, #announcements")
-    print("  Demo credentials:")
-    print("     - alex / password123")
-    print("     - sarah / password123")
     print("=" * 60)
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
+
+    socketio.run(
+        app,
+        host="0.0.0.0",
+        port=5000,
+        debug=True,
+        allow_unsafe_werkzeug=True,
+    )

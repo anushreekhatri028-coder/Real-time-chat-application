@@ -211,9 +211,9 @@ function initSocketConnection() {
     socket.disconnect();
   }
 
-  socket = io(window.location.origin, {
+  socket = io({
     withCredentials: true
-  });
+});
 
   socket.on('connect', () => {
     updateConnectionStatus(true);

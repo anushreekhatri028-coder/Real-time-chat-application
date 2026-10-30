@@ -211,7 +211,8 @@ function initSocketConnection() {
     socket.disconnect();
   }
 
-  socket = io({
+  socket = io(window.location.origin, {
+    transports: ['websocket', 'polling'],
     withCredentials: true
 });
 

@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexusChat — Admin Control Center & Analytics</title>
+  <link rel="stylesheet" href="/frontend/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%22><text y=%2222%22 font-size=%2220%22>🛡️</text></svg>">
+  <!-- Chart.js CDN for responsive analytics visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="admin-body">
+  <div class="admin-layout">
+    <!-- Admin Top Navbar -->
+    <header class="admin-navbar">
+      <div class="admin-brand">
+        <div class="sidebar-brand-icon">⚡</div>
+        <div>
+          <div style="font-size: 16px; font-weight: 800; color: #fff; letter-spacing: -0.3px;">NexusChat Admin</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Platform Analytics & Content Moderation</div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <a href="/chat" class="btn-secondary" style="text-decoration: none; display: flex; align-items: center; gap: 6px;">
+          <span>💬</span>
+          <span>Return to Chat</span>
+        </a>
+        <div class="admin-user-badge">
+          <div class="user-avatar" id="admin-avatar" style="width: 28px; height: 28px; font-size: 12px; background: #6366f1;">A</div>
+          <span id="admin-name" style="font-size: 13px; font-weight: 600; color: #fff;">Admin</span>
+          <span class="badge-tag" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">ADMIN</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="admin-main">
+      <!-- 1. Overview Statistics Cards Grid -->
+      <section class="admin-stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon-wrapper" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">👥</div>
+          <div class="stat-details">
+            <span class="stat-label">Total Users</span>
+            <span class="stat-value" id="stat-total-users">0</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon-wrapper" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">🟢</div>
+          <div class="stat-details">
+            <span class="stat-label">Active Users</span>
+            <span class="stat-value" id="stat-active-users">0</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon-wrapper" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">💬</div>
+          <div class="stat-details">
+            <span class="stat-label">Total Messages</span>
+            <span class="stat-value" id="stat-total-messages">0</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon-wrapper" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa;">📢</div>
+          <div class="stat-details">
+            <span class="stat-label">Channels</span>
+            <span class="stat-value" id="stat-total-channels">0</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon-wrapper" style="background: rgba(139, 92, 246, 0.15); color: #a78bfa;">👥</div>
+          <div class="stat-details">
+            <span class="stat-label">Group Chats</span>
+            <span class="stat-value" id="stat-total-groups">0</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon-wrapper" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">🚩</div>
+          <div class="stat-details">
+            <span class="stat-label">Pending Reports</span>
+            <span class="stat-value" id="stat-pending-reports">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Analytics Charts Row -->
+      <section class="admin-charts-grid">
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3>Daily Message Activity (Last 7 Days)</h3>
+            <span style="font-size: 12px; color: var(--text-muted);">Real-time metrics</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="dailyActivityChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3>Most Active Channels</h3>
+            <span style="font-size: 12px; color: var(--text-muted);">By message volume</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="activeChannelsChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Administrative Control Tabs -->
+      <section class="admin-content-section">
+        <div class="admin-tabs">
+          <button class="admin-tab-btn active" id="tab-users-btn" onclick="switchAdminTab('users')">User Management</button>
+          <button class="admin-tab-btn" id="tab-reports-btn" onclick="switchAdminTab('reports')">
+            <span>Reported Messages</span>
+            <span class="badge-tag" id="tab-reports-count" style="display:none; background: #ef4444; color: #fff;">0</span>
+          </button>
+          <button class="admin-tab-btn" id="tab-logs-btn" onclick="switchAdminTab('logs')">Moderation Logs</button>
+        </div>
+
+        <!-- Tab 1: User Management Panel -->
+        <div class="admin-tab-panel active" id="admin-panel-users">
+          <div class="panel-action-bar">
+            <div class="search-box-wrapper">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="admin-user-search" class="admin-search-input" placeholder="Search users by name, username or email..." oninput="filterUsers(this.value)">
+            </div>
+            <button class="btn-secondary" onclick="loadUsersData()">Refresh Users</button>
+          </div>
+
+          <div class="admin-table-wrapper">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Messages</th>
+                  <th>Account Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 2: Reported Messages Moderation Panel -->
+        <div class="admin-tab-panel" id="admin-panel-reports">
+          <div class="panel-action-bar">
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-filter-tag active" onclick="filterReports('pending', this)">Pending</button>
+              <button class="btn-filter-tag" onclick="filterReports('resolved', this)">Resolved</button>
+              <button class="btn-filter-tag" onclick="filterReports('dismissed', this)">Dismissed</button>
+              <button class="btn-filter-tag" onclick="filterReports('', this)">All</button>
+            </div>
+            <button class="btn-secondary" onclick="loadReportsData()">Refresh Reports</button>
+          </div>
+
+          <div class="admin-table-wrapper">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Reported Message</th>
+                  <th>Author</th>
+                  <th>Reporter</th>
+                  <th>Reason</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="admin-reports-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 3: Moderation Audit Logs -->
+        <div class="admin-tab-panel" id="admin-panel-logs">
+          <div class="panel-action-bar">
+            <span style="font-size: 13px; color: var(--text-muted);">Chronological audit trail of all actions performed by platform administrators.</span>
+            <button class="btn-secondary" onclick="loadLogsData()">Refresh Logs</button>
+          </div>
+
+          <div class="admin-table-wrapper">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Admin</th>
+                  <th>Action</th>
+                  <th>Target User</th>
+                  <th>Message ID</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="admin-logs-table-body">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Admin JavaScript Logic -->
+  <script>
+    let allUsers = [];
+    let allReports = [];
+    let currentReportFilter = 'pending';
+    let dailyChart = null;
+    let channelChart = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await checkAdminAuth();
+      await loadAdminDashboardStats();
+      await loadUsersData();
+      await loadReportsData();
+      await loadLogsData();
+    });
+
+    async function checkAdminAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) {
+          window.location.href = '/login';
+          return;
+        }
+        const data = await res.json();
+        if (!data.authenticated || data.user.role !== 'admin') {
+          alert('Access denied: Administrator privileges required.');
+          window.location.href = '/chat';
+          return;
+        }
+
+        const nameEl = document.getElementById('admin-name');
+        const avatarEl = document.getElementById('admin-avatar');
+        if (nameEl) nameEl.textContent = data.user.display_name || data.user.username;
+        if (avatarEl) {
+          avatarEl.textContent = (data.user.display_name || data.user.username)[0].toUpperCase();
+          avatarEl.style.backgroundColor = data.user.avatar_color || '#6366f1';
+        }
+      } catch (e) {
+        window.location.href = '/login';
+      }
+    }
+
+    async function loadAdminDashboardStats() {
+      try {
+        const res = await fetch('/api/admin/stats');
+        const data = await res.json();
+        if (!data.success) return;
+
+        const s = data.stats;
+        setText('stat-total-users', s.total_users);
+        setText('stat-active-users', s.active_users);
+        setText('stat-total-messages', s.total_messages);
+        setText('stat-total-channels', s.total_channels);
+        setText('stat-total-groups', s.total_groups);
+        setText('stat-pending-reports', s.pending_reports);
+
+        const badge = document.getElementById('tab-reports-count');
+        if (badge) {
+          if (s.pending_reports > 0) {
+            badge.style.display = 'inline-block';
+            badge.textContent = s.pending_reports;
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+
+        renderDailyActivityChart(s.daily_stats || []);
+        renderActiveChannelsChart(s.most_active_channels || []);
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      }
+    }
+
+    function renderDailyActivityChart(dailyStats) {
+      const ctx = document.getElementById('dailyActivityChart')?.getContext('2d');
+      if (!ctx) return;
+
+      const labels = dailyStats.length ? dailyStats.map(d => d.msg_date) : ['Today'];
+      const counts = dailyStats.length ? dailyStats.map(d => d.count) : [0];
+
+      if (dailyChart) dailyChart.destroy();
+
+      dailyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Messages',
+            data: counts,
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99, 102, 241, 0.2)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 2,
+            pointBackgroundColor: '#818cf8',
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0, color: '#94a3b8' },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            },
+            x: {
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            }
+          }
+        }
+      });
+    }
+
+    function renderActiveChannelsChart(channels) {
+      const ctx = document.getElementById('activeChannelsChart')?.getContext('2d');
+      if (!ctx) return;
+
+      const labels = channels.length ? channels.map(c => (c.icon || '#') + ' ' + c.name) : ['No Channels'];
+      const counts = channels.length ? channels.map(c => c.message_count) : [0];
+
+      if (channelChart) channelChart.destroy();
+
+      channelChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Messages',
+            data: counts,
+            backgroundColor: [
+              'rgba(99, 102, 241, 0.8)',
+              'rgba(236, 72, 153, 0.8)',
+              'rgba(16, 185, 129, 0.8)',
+              'rgba(249, 115, 22, 0.8)',
+              'rgba(59, 130, 246, 0.8)'
+            ],
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0, color: '#94a3b8' },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            },
+            x: {
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            }
+          }
+        }
+      });
+    }
+
+    async function loadUsersData() {
+      try {
+        const res = await fetch('/api/admin/users');
+        const data = await res.json();
+        if (data.success) {
+          allUsers = data.users || [];
+          renderUsersTable(allUsers);
+        }
+      } catch (err) {
+        console.error('Failed to load users:', err);
+      }
+    }
+
+    function renderUsersTable(users) {
+      const tbody = document.getElementById('admin-users-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      if (users.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">No users found</td></tr>`;
+        return;
+      }
+
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        const isSuspended = !!u.is_suspended;
+        const isAdmin = u.role === 'admin';
+
+        tr.innerHTML = `
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div class="user-avatar" style="width:30px;height:30px;font-size:12px;background-color:${u.avatar_color || '#6366f1'};">
+                ${(u.display_name || u.username)[0].toUpperCase()}
+              </div>
+              <div>
+                <div style="font-weight:600;color:#fff;">${escapeHtml(u.display_name || u.username)}</div>
+                <div style="font-size:11px;color:var(--text-muted);">@${escapeHtml(u.username)}</div>
+              </div>
+            </div>
+          </td>
+          <td><span style="color:var(--text-secondary);font-size:12.5px;">${escapeHtml(u.email)}</span></td>
+          <td>
+            <span class="badge-tag ${isAdmin ? 'badge-admin' : 'badge-user'}">${u.role.toUpperCase()}</span>
+          </td>
+          <td>
+            <span class="status-indicator status-${u.status || 'offline'}" style="position:static;display:inline-block;margin-right:6px;"></span>
+            <span style="font-size:12px;text-transform:capitalize;">${u.status || 'offline'}</span>
+          </td>
+          <td><span style="font-weight:600;">${u.total_messages || 0}</span></td>
+          <td>
+            <span class="status-badge ${isSuspended ? 'status-suspended' : 'status-active'}">
+              ${isSuspended ? 'Suspended' : 'Active'}
+            </span>
+          </td>
+          <td>
+            <div style="display:flex;gap:6px;">
+              <button class="btn-action ${isSuspended ? 'btn-activate' : 'btn-suspend'}"
+                      onclick="handleToggleSuspension(${u.id}, ${!isSuspended})">
+                ${isSuspended ? 'Reactivate' : 'Suspend'}
+              </button>
+              <button class="btn-action btn-secondary-sm"
+                      onclick="handleToggleRole(${u.id}, '${isAdmin ? 'user' : 'admin'}')">
+                ${isAdmin ? 'Demote' : 'Make Admin'}
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filterUsers(query) {
+      const q = query.toLowerCase().trim();
+      const filtered = allUsers.filter(u =>
+        u.username.toLowerCase().includes(q) ||
+        (u.display_name && u.display_name.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q))
+      );
+      renderUsersTable(filtered);
+    }
+
+    async function handleToggleSuspension(userId, suspend) {
+      const actionName = suspend ? 'suspend' : 'reactivate';
+      if (!confirm(`Are you sure you want to ${actionName} this user account?`)) return;
+
+      try {
+        const res = await fetch(`/api/admin/users/${userId}/suspend`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ suspend, details: `Admin action: ${actionName}` })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`User account ${suspend ? 'suspended' : 'reactivated'}.`, 'success');
+          await loadUsersData();
+          await loadAdminDashboardStats();
+          await loadLogsData();
+        } else {
+          showToast(data.error || 'Failed to update user status.', 'error');
+        }
+      } catch (err) {
+        showToast('Operation failed.', 'error');
+      }
+    }
+
+    async function handleToggleRole(userId, newRole) {
+      if (!confirm(`Change user role to ${newRole.toUpperCase()}?`)) return;
+
+      try {
+        const res = await fetch(`/api/admin/users/${userId}/role`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: newRole })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`User role changed to ${newRole}.`, 'success');
+          await loadUsersData();
+          await loadLogsData();
+        } else {
+          showToast(data.error || 'Failed to update user role.', 'error');
+        }
+      } catch (err) {
+        showToast('Operation failed.', 'error');
+      }
+    }
+
+    async function loadReportsData() {
+      try {
+        const url = currentReportFilter ? `/api/admin/reports?status=${encodeURIComponent(currentReportFilter)}` : '/api/admin/reports';
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.success) {
+          allReports = data.reports || [];
+          renderReportsTable(allReports);
+        }
+      } catch (err) {
+        console.error('Failed to load reports:', err);
+      }
+    }
+
+    function filterReports(status, btn) {
+      currentReportFilter = status;
+      document.querySelectorAll('#admin-panel-reports .btn-filter-tag').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      loadReportsData();
+    }
+
+    function renderReportsTable(reports) {
+      const tbody = document.getElementById('admin-reports-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      if (reports.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:24px;">No reports in this view</td></tr>`;
+        return;
+      }
+
+      reports.forEach(r => {
+        const tr = document.createElement('tr');
+        const isPending = r.status === 'pending';
+
+        tr.innerHTML = `
+          <td><span style="font-family:monospace;font-size:11px;color:var(--text-muted);">#${r.id}</span></td>
+          <td style="max-width:260px;">
+            <div style="background:var(--bg-card);padding:6px 10px;border-radius:6px;border:1px solid var(--border-subtle);font-size:12.5px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.message_content)}">
+              ${escapeHtml(r.message_content)}
+            </div>
+            ${r.is_deleted ? '<span style="font-size:10px;color:#f87171;">[Message Deleted]</span>' : ''}
+          </td>
+          <td>
+            <div style="font-weight:600;color:#fff;">${escapeHtml(r.author_display_name || r.author_username)}</div>
+            <div style="font-size:11px;color:var(--text-muted);">@${escapeHtml(r.author_username)}</div>
+          </td>
+          <td>
+            <span style="font-size:12px;color:var(--text-secondary);">@${escapeHtml(r.reporter_username)}</span>
+          </td>
+          <td>
+            <span class="badge-tag" style="background:rgba(239, 68, 68, 0.15);color:#fca5a5;border:1px solid rgba(239, 68, 68, 0.3);">
+              ${escapeHtml(r.reason)}
+            </span>
+          </td>
+          <td><span style="font-size:11.5px;color:var(--text-muted);">${formatDate(r.created_at)}</span></td>
+          <td>
+            <span class="status-badge status-${r.status}">
+              ${r.status.toUpperCase()}
+            </span>
+          </td>
+          <td>
+            ${isPending ? `
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <button class="btn-action btn-danger" onclick="handleReportAction(${r.id}, 'delete_message')">Delete Msg</button>
+                <button class="btn-action btn-warning" onclick="handleReportAction(${r.id}, 'warn_user')">Warn</button>
+                <button class="btn-action btn-suspend" onclick="handleReportAction(${r.id}, 'suspend_user')">Suspend</button>
+                <button class="btn-action btn-secondary-sm" onclick="handleReportAction(${r.id}, 'dismiss')">Dismiss</button>
+              </div>
+            ` : `<span style="font-size:11px;color:var(--text-muted);">Resolved</span>`}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function handleReportAction(reportId, action) {
+      let promptText = `Execute ${action} for report #${reportId}?`;
+      if (action === 'delete_message') promptText = 'Delete this reported message from the conversation?';
+      if (action === 'suspend_user') promptText = 'Suspend the user account that authored this message?';
+      if (action === 'dismiss') promptText = 'Dismiss this report as resolved without sanctions?';
+
+      if (!confirm(promptText)) return;
+
+      try {
+        const res = await fetch(`/api/admin/reports/${reportId}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, details: `Action taken from Admin Dashboard: ${action}` })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Report action '${action}' completed.`, 'success');
+          await loadReportsData();
+          await loadAdminDashboardStats();
+          await loadLogsData();
+        } else {
+          showToast(data.error || 'Failed to process report.', 'error');
+        }
+      } catch (err) {
+        showToast('Operation failed.', 'error');
+      }
+    }
+
+    async function loadLogsData() {
+      try {
+        const res = await fetch('/api/admin/moderation-logs');
+        const data = await res.json();
+        if (data.success) {
+          renderLogsTable(data.logs || []);
+        }
+      } catch (err) {
+        console.error('Failed to load logs:', err);
+      }
+    }
+
+    function renderLogsTable(logs) {
+      const tbody = document.getElementById('admin-logs-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      if (logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:24px;">No moderation activity logs yet</td></tr>`;
+        return;
+      }
+
+      logs.forEach(l => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span style="font-size:11.5px;color:var(--text-muted);">${formatDate(l.created_at)}</span></td>
+          <td><span style="font-weight:600;color:#fff;">@${escapeHtml(l.admin_username)}</span></td>
+          <td><span class="badge-tag" style="background:rgba(99, 102, 241, 0.2);color:#a5b4fc;border:1px solid rgba(99, 102, 241, 0.3);">${escapeHtml(l.action)}</span></td>
+          <td>${l.target_username ? `@${escapeHtml(l.target_username)}` : '<span style="color:var(--text-muted);">-</span>'}</td>
+          <td>${l.message_id ? `<span style="font-family:monospace;font-size:11px;">#${l.message_id}</span>` : '<span style="color:var(--text-muted);">-</span>'}</td>
+          <td><span style="font-size:12px;color:var(--text-secondary);">${escapeHtml(l.details || '')}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function switchAdminTab(mode) {
+      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.remove('active'));
+
+      const btn = document.getElementById(`tab-${mode}-btn`);
+      const panel = document.getElementById(`admin-panel-${mode}`);
+
+      if (btn) btn.classList.add('active');
+      if (panel) panel.classList.add('active');
+    }
+
+    function setText(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val ?? '0';
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z'));
+      if (isNaN(d.getTime())) return iso;
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[c]);
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+  </script>
+</body>
+</html>
+

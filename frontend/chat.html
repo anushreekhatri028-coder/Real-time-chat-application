@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NexusChat — Real-Time Channels & Direct Messages</title>
+  <title>NexusChat — Real-Time Channels, Groups & Direct Messages</title>
   <link rel="stylesheet" href="/frontend/style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%22><text y=%2222%22 font-size=%2220%22>💬</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%22><text y=%2222%22 font-size=%2220%22>⚡</text></svg>">
 </head>
 <body>
   <div class="chat-app-layout">
@@ -25,7 +25,7 @@
         </div>
       </div>
 
-      <!-- Scrollable Channels & DMs list -->
+      <!-- Scrollable Channels, Groups & DMs list -->
       <div class="sidebar-content">
         <!-- Channels Section -->
         <div>
@@ -34,6 +34,17 @@
             <button class="sidebar-add-btn" onclick="openCreateChannelModal()" title="Create Channel">+</button>
           </div>
           <div class="channel-list" id="channel-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Groups Section -->
+        <div>
+          <div class="sidebar-section-title">
+            <span>Groups</span>
+            <button class="sidebar-add-btn" onclick="openCreateGroupModal()" title="Create Group">+</button>
+          </div>
+          <div class="group-list" id="group-list">
             <!-- Dynamically populated -->
           </div>
         </div>
@@ -63,6 +74,9 @@
         </div>
 
         <div class="footer-actions">
+          <button class="btn-icon-footer" id="admin-dashboard-btn" style="display: none;" onclick="window.location.href='/admin'" title="Admin Dashboard">
+            <span>🛡️</span>
+          </button>
           <button class="btn-icon-footer" onclick="toggleUserStatusMenu(event)" title="Change Presence Status">
             <span>🟢</span>
           </button>
@@ -85,6 +99,7 @@
             <div class="room-title" id="room-header-title">
               <span id="room-header-icon">#</span>
               <span id="room-header-name">general</span>
+              <span id="room-header-badge" class="badge-tag" style="display:none; margin-left: 8px;">Group</span>
             </div>
             <div class="room-desc" id="room-header-desc">Welcome lobby! Say hi and talk about anything.</div>
           </div>
@@ -97,13 +112,32 @@
             <input type="text" id="message-search-input" placeholder="Search in room..." oninput="handleSearchMessages(this.value)">
           </div>
 
+          <!-- Notification Center Bell -->
+          <div class="notification-wrapper" style="position: relative;">
+            <button class="header-tool-btn" id="notif-bell-btn" onclick="toggleNotificationCenter(event)" title="Notifications">
+              <span>🔔</span>
+              <span class="notif-badge" id="notif-badge" style="display: none;">0</span>
+            </button>
+
+            <!-- Dropdown Notification Center -->
+            <div class="notif-dropdown" id="notif-dropdown">
+              <div class="notif-dropdown-header">
+                <span class="notif-dropdown-title">Notifications</span>
+                <button class="notif-readall-btn" onclick="handleMarkAllNotificationsRead()">Mark all read</button>
+              </div>
+              <div class="notif-dropdown-list" id="notif-dropdown-list">
+                <div class="notif-empty-state">No notifications yet</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Sound Effects Toggle -->
           <button class="header-tool-btn active" id="sound-toggle-btn" onclick="toggleSound()" title="Audio Notifications On/Off">
             <span id="sound-icon">🔔</span>
           </button>
 
           <!-- Toggle Right Panel (Members/Info) -->
-          <button class="header-tool-btn" id="right-panel-toggle-btn" onclick="toggleRightPanel()" title="Channel Members & Info">
+          <button class="header-tool-btn" id="right-panel-toggle-btn" onclick="toggleRightPanel()" title="Room Details & Members">
             <span>👥</span>
           </button>
         </div>
@@ -142,6 +176,16 @@
       <!-- Bottom Chat Input Box -->
       <div class="chat-input-wrapper">
         <div class="input-box-container">
+          <!-- Reply Preview Bar (shown when replying to a message) -->
+          <div class="reply-preview-bar" id="reply-preview-bar" style="display: none;">
+            <div class="reply-preview-indicator"></div>
+            <div class="reply-preview-content">
+              <div class="reply-preview-user" id="reply-preview-user">Replying to User</div>
+              <div class="reply-preview-text" id="reply-preview-text">Message preview...</div>
+            </div>
+            <button class="remove-attachment-btn" onclick="cancelReply()" title="Cancel Reply">✕</button>
+          </div>
+
           <!-- Attachment Preview Bar (shown when file is selected) -->
           <div class="attachment-preview-bar" id="attachment-preview-bar">
             <img id="attachment-preview-img" class="attachment-thumb" src="" alt="preview" style="display: none;">
@@ -191,7 +235,7 @@
           <div class="emoji-popover" id="emoji-popover">
             <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Quick Emojis</div>
             <div class="emoji-grid" id="emoji-grid">
-              <!-- Dynamically populated or rendered -->
+              <!-- Dynamically populated -->
             </div>
           </div>
         </div>
@@ -203,15 +247,24 @@
          ==================================================================== -->
     <aside class="chat-right-panel" id="right-panel">
       <div class="panel-header">
-        <span>Channel Info</span>
+        <span id="right-panel-title">Details</span>
         <button class="btn-icon-footer" onclick="toggleRightPanel()">✕</button>
       </div>
 
       <div class="panel-content">
         <!-- Room Details Card -->
         <div style="background: var(--bg-card); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
-          <div style="font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 6px;" id="panel-room-name"># general</div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <div style="font-size: 14px; font-weight: 700; color: #fff;" id="panel-room-name"># general</div>
+            <div id="panel-group-badge" class="badge-tag" style="display:none;">Group</div>
+          </div>
           <div style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.4;" id="panel-room-desc">Welcome lobby! Say hi and talk about anything.</div>
+
+          <!-- Group Administration Actions Bar (Visible only for groups) -->
+          <div id="group-actions-bar" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; gap: 8px;">
+            <button class="btn-secondary" id="btn-add-group-member" onclick="openAddGroupMemberModal()" style="font-size: 12px; padding: 6px 10px;">+ Add Member</button>
+            <button class="btn-secondary" id="btn-leave-group" onclick="handleLeaveGroup()" style="font-size: 12px; padding: 6px 10px; color: #f87171;">Leave Group</button>
+          </div>
         </div>
 
         <!-- Online Members -->
@@ -238,7 +291,7 @@
   </div>
 
   <!-- ====================================================================
-       Modals: Create Channel & User Profile
+       Modals: Channels, Groups, Profile, Edit, Forward, Report
        ==================================================================== -->
 
   <!-- Create Channel Modal -->
@@ -279,6 +332,141 @@
     </div>
   </div>
 
+  <!-- Create Group Modal -->
+  <div class="modal-overlay" id="create-group-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Group Chat</h3>
+        <button class="modal-close-btn" onclick="closeCreateGroupModal()">✕</button>
+      </div>
+      <form onsubmit="handleCreateGroup(event)">
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label>Group Name</label>
+          <div class="input-wrapper">
+            <span class="input-icon">👥</span>
+            <input type="text" id="new-group-name" class="form-control" placeholder="e.g. Frontend Engineering" required>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label>Description</label>
+          <input type="text" id="new-group-desc" class="form-control" placeholder="What is this group about?" style="padding-left: 14px;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label>Group Avatar Color</label>
+          <div class="color-palette-row" id="group-color-palette">
+            <button type="button" class="color-choice-btn selected" style="background:#8b5cf6;" onclick="selectGroupColor(this, '#8b5cf6')"></button>
+            <button type="button" class="color-choice-btn" style="background:#ec4899;" onclick="selectGroupColor(this, '#ec4899')"></button>
+            <button type="button" class="color-choice-btn" style="background:#10b981;" onclick="selectGroupColor(this, '#10b981')"></button>
+            <button type="button" class="color-choice-btn" style="background:#3b82f6;" onclick="selectGroupColor(this, '#3b82f6')"></button>
+            <button type="button" class="color-choice-btn" style="background:#f97316;" onclick="selectGroupColor(this, '#f97316')"></button>
+            <button type="button" class="color-choice-btn" style="background:#06b6d4;" onclick="selectGroupColor(this, '#06b6d4')"></button>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label>Select Members</label>
+          <div class="member-checklist" id="group-member-checklist" style="max-height: 160px; overflow-y: auto; background: var(--bg-card); border-radius: var(--radius-md); padding: 8px; border: 1px solid var(--border-subtle);">
+            <!-- Dynamically populated with user checkboxes -->
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary" style="width: 100%;">Create Group</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Group Member Modal -->
+  <div class="modal-overlay" id="add-group-member-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Add Member to Group</h3>
+        <button class="modal-close-btn" onclick="closeAddGroupMemberModal()">✕</button>
+      </div>
+      <form onsubmit="handleAddGroupMember(event)">
+        <div class="form-group" style="margin-bottom: 18px;">
+          <label>Select User</label>
+          <select id="add-member-select" class="form-control" style="padding-left: 14px;" required>
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%;">Add to Group</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Forward Message Modal -->
+  <div class="modal-overlay" id="forward-message-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Forward Message</h3>
+        <button class="modal-close-btn" onclick="closeForwardModal()">✕</button>
+      </div>
+      <div class="forward-preview-box" id="forward-preview-box">
+        <!-- Message snippet -->
+      </div>
+      <form onsubmit="handleExecuteForward(event)">
+        <div class="form-group" style="margin-bottom: 18px;">
+          <label>Select Destination Room / Conversation</label>
+          <select id="forward-destination-select" class="form-control" style="padding-left: 14px;" required>
+            <!-- Populated dynamically with channels, groups, DMs -->
+          </select>
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%;">Forward Message</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Message Modal -->
+  <div class="modal-overlay" id="edit-message-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Edit Message</h3>
+        <button class="modal-close-btn" onclick="closeEditMessageModal()">✕</button>
+      </div>
+      <form onsubmit="handleSaveEditedMessage(event)">
+        <div class="form-group" style="margin-bottom: 18px;">
+          <label>Message Content</label>
+          <textarea id="edit-message-textarea" class="chat-textarea" rows="4" style="width: 100%; border: 1px solid var(--border-subtle); padding: 10px; border-radius: 8px; resize: vertical;" required></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn-secondary" onclick="closeEditMessageModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Report Message Modal -->
+  <div class="modal-overlay" id="report-message-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Report Message</h3>
+        <button class="modal-close-btn" onclick="closeReportModal()">✕</button>
+      </div>
+      <form onsubmit="handleSubmitReport(event)">
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label>Reason for Report</label>
+          <select id="report-reason-select" class="form-control" style="padding-left: 14px;" required>
+            <option value="spam">Spam or Advertising</option>
+            <option value="harassment">Harassment or Bullying</option>
+            <option value="abuse">Hate Speech or Abusive Language</option>
+            <option value="inappropriate">Inappropriate or Offensive Content</option>
+            <option value="other">Other Violation</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 18px;">
+          <label>Additional Details (Optional)</label>
+          <textarea id="report-details-input" class="chat-textarea" rows="3" placeholder="Provide extra context for moderators..." style="width: 100%; border: 1px solid var(--border-subtle); padding: 10px; border-radius: 8px;"></textarea>
+        </div>
+
+        <button type="submit" class="btn-primary" style="width: 100%; background: #ef4444;">Submit Report</button>
+      </form>
+    </div>
+  </div>
+
   <!-- User Profile Modal -->
   <div class="modal-overlay" id="user-profile-modal">
     <div class="modal-card">
@@ -291,6 +479,7 @@
         <div style="text-align: center;">
           <h4 id="modal-display-name" style="font-size: 18px; font-weight: 700; color: #fff;">User Name</h4>
           <span id="modal-username" style="font-size: 13px; color: var(--text-muted);">@username</span>
+          <div id="modal-role-badge" class="badge-tag" style="margin-top: 6px; display: inline-block;">User</div>
         </div>
         <p id="modal-bio" style="font-size: 13.5px; color: var(--text-secondary); text-align: center; max-width: 320px; line-height: 1.5;"></p>
       </div>

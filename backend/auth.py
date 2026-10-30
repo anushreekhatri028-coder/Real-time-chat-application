@@ -177,6 +177,10 @@ def authenticate_user(identifier, password):
     ):
         return False, "Invalid credentials. Password does not match."
 
+    # Check whether the account is suspended
+    if user.get("is_suspended"):
+        return False, "This account has been suspended by an administrator."
+
     # Never return the password hash to the frontend
     safe_user = {
         "id": user["id"],
@@ -186,6 +190,8 @@ def authenticate_user(identifier, password):
         "avatar_color": user["avatar_color"],
         "bio": user["bio"],
         "status": user["status"],
+        "role": user.get("role", "user"),
+        "is_suspended": user.get("is_suspended", 0),
     }
 
     return True, safe_user
@@ -199,6 +205,7 @@ def login_user_session(user_dict):
     session["user_id"] = user_dict["id"]
     session["username"] = user_dict["username"]
     session["display_name"] = user_dict["display_name"]
+    session["role"] = user_dict.get("role", "user")
     session.permanent = True
 
 
@@ -221,7 +228,12 @@ def get_current_user():
     if not user_id:
         return None
 
-    return get_user_by_id(user_id)
+    user = get_user_by_id(user_id)
+    if user and user.get("is_suspended"):
+        session.clear()
+        return None
+
+    return user
 
 
 def login_required(f):
@@ -238,6 +250,46 @@ def login_required(f):
                 }), 401
 
             return redirect(url_for("login_page"))
+
+        # Verify active user is not suspended
+        user = get_current_user()
+        if not user:
+            if request.path.startswith("/api/"):
+                return jsonify({
+                    "success": False,
+                    "error": "Account suspended",
+                    "message": "Your session has ended because this account is suspended.",
+                }), 403
+            return redirect(url_for("login_page"))
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def admin_required(f):
+    """Decorator that protects administrative routes requiring admin role."""
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "user_id" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify({
+                    "success": False,
+                    "error": "Unauthorized",
+                    "message": "Please log in first.",
+                }), 401
+            return redirect(url_for("login_page"))
+
+        user = get_current_user()
+        if not user or user.get("role") != "admin":
+            if request.path.startswith("/api/"):
+                return jsonify({
+                    "success": False,
+                    "error": "Forbidden",
+                    "message": "Administrator privileges required.",
+                }), 403
+            return redirect(url_for("chat_page"))
 
         return f(*args, **kwargs)
 

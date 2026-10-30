@@ -1,112 +1,142 @@
-# ⚡ NexusChat — Real-Time Chat Application
+# ⚡ NexusChat — Advanced Real-Time Chat Application
 
-A modern, high-performance **Real-Time Chat Application** built using **Python, Flask, and WebSockets (Flask-SocketIO)** with SQLite message and user persistence. Supports both a rich **Web GUI** and an interactive **Console / Terminal Client**.
+An enterprise-grade, high-performance **Real-Time Messaging Platform** built using **Python, Flask, Flask-SocketIO (WebSockets), and SQLite**. Supports rich Web GUI interactions, mobile responsive cyber/dark glassmorphism design, interactive Terminal Client, Group Chats, Message Management (Edit, Delete, Reply, Forward), Read Receipts (ticks & unread badges), Notification Center, Profanity Filtering & Content Moderation, and a comprehensive Admin Dashboard with Chart.js analytics.
 
 ---
 
-## 📁 Project Structure
-
-As specified in the design architecture:
+## 📁 Enhanced Project Structure
 
 ```text
-real-time-chat-app/
+NexusChat/
 ├── backend/
-│   ├── app.py              # Flask server, REST APIs, and Socket.IO event handlers
-│   ├── database.py         # SQLite connection, schema initialization & CRUD queries
-│   ├── auth.py             # Registration, login, password hashing, and session management
-│   ├── moderation.py       # Automated profanity filter & content sanitization logic
+│   ├── app.py              # Flask server, REST APIs, Socket.IO handlers, authorization & routing
+│   ├── auth.py             # Auth module, password hashing, session RBAC & access control decorators
+│   ├── database.py         # SQLite connection, schema migrations, CRUD & relational queries
+│   ├── moderation.py       # Robust regex-based profanity filtering & structure preservation
 │   └── requirements.txt    # Python dependencies
+│
 ├── frontend/
-│   ├── index.html        # Authentication & landing page (Login / Register)
-│   ├── chat.html         # Full-featured chat workspace interface
-│   ├── style.css         # Modern Cyber/Dark glassmorphic styling
-│   └── script.js         # WebSocket client logic, audio synthesizer & state
-├── console_client.py     # Interactive terminal client with ANSI colors & WebSocket sync
-├── run.py                # Server launcher script
-└── chat.db               # SQLite database (automatically created and seeded)
+│   ├── index.html          # Authentication portal (Sign In / Register & 1-click Demo accounts)
+│   ├── chat.html           # Full-featured chat workspace (Channels, Groups, DMs, Modals)
+│   ├── admin.html          # Administrative Dashboard & Analytics (Chart.js, Moderation, User Control)
+│   ├── style.css           # Modern Cyber/Dark glassmorphic styling, responsive layout
+│   └── script.js           # Real-time WebSocket client logic, audio synthesizer & state machine
+│
+├── tests/
+│   └── test_nexuschat.py   # Comprehensive automated test suite (15 end-to-end integration tests)
+│
+├── uploads/                # User uploaded attachments and media
+├── chat.db                 # SQLite database (auto-migrating, schema-preserving)
+├── console_client.py       # Interactive terminal client with ANSI colors & WebSocket sync
+├── run.py                  # Server launcher
+└── README.md               # Complete platform documentation
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start & Installation
 
-### 1. Install Dependencies
+### 1. Prerequisites
+- Python 3.10+ installed
+- Virtual environment recommended
+
+### 2. Install Dependencies
+From the repository root or `real-time-chat-app/`:
 ```bash
-cd real-time-chat-app
 pip install -r backend/requirements.txt
 ```
 
-### 2. Start the Server
-Run the launcher script:
+### 3. Start the NexusChat Server
+From the root directory:
 ```bash
 python run.py
 ```
-*The server will start on `http://localhost:5000`.*
+*(Or: `cd real-time-chat-app && python run.py`)*
+
+The server starts at **`http://localhost:5000`**.
 
 ---
 
-## 🌐 Running the Web GUI
+## 🌐 Accessing the Application
 
-Open your browser and navigate to:
-```
-http://localhost:5000
-```
-
-### 👥 Instant Demo Accounts
-The database is pre-seeded with sample users for instant 1-click testing:
-- **Alex Rivers**: `alex` / `password123`
-- **Sarah Chen**: `sarah` / `password123`
-*(You can also click the quick demo buttons on the login page or register a new custom account).*
-
-> **Tip for Dual-Client Testing**: Open one tab in standard mode as **Alex**, and another tab in an **Incognito / Private Window** as **Sarah** to see real-time messaging, typing indicators, reactions, and online status updates live!
+1. Open your browser and navigate to:
+   ```
+   http://localhost:5000
+   ```
+2. **Demo Accounts**:
+   - **Alex Rivers (Administrator)**:
+     - Username: `alex` | Password: `password123`
+     - Role: `admin` (Has access to `/admin` dashboard and full moderation privileges)
+   - **Sarah Chen (Standard User)**:
+     - Username: `sarah` | Password: `password123`
+     - Role: `user` (Standard member)
+3. **Dual-User Testing**:
+   - Tab 1 (Normal Window): Log in as **Alex**
+   - Tab 2 (Incognito / Private Window): Log in as **Sarah**
+   - Test real-time group chat, direct messages, message editing, soft-deletes, replies, forward modals, and live read receipts!
 
 ---
 
 ## 💻 Running the Terminal / Console Client
 
-You can also chat directly from your terminal! The console client connects over WebSockets in real-time with browser users:
-
+Chat simultaneously from your terminal with browser users over WebSockets:
 ```bash
 python console_client.py
 ```
 
-### Console Commands:
-- `/rooms` — List all available channels
-- `/join <channel>` — Switch channels (e.g. `/join tech-talk`)
-- `/users` — List all registered users and their online status
-- `/help` — Ask Nova Bot for assistance
-- `/quit` — Exit the client
+Commands in terminal:
+- `/rooms` — List all channels
+- `/join <channel>` — Switch channels (e.g. `/join general`)
+- `/users` — List registered users and presence
+- `/help` — Nova Bot assistant menu
+- `/quit` — Exit client
 
 ---
 
-## 🌟 Key Features
+## 🧪 Automated Testing Suite
 
-1. **Bidirectional Real-Time Communication**:
-   - Powered by WebSockets with automatic fallback to long-polling via Flask-SocketIO.
-   - Low latency message delivery, status updates, and reactions.
+Run the full end-to-end integration and security test suite:
+```bash
+python ../tests/test_nexuschat.py
+```
+*(or `python tests/test_nexuschat.py` from root)*
 
-2. **Channels & 1-on-1 Direct Messaging (DMs)**:
-   - Default channels: `#general`, `#tech-talk`, `#random`, `#announcements`.
-   - Create custom channels dynamically with custom icons.
-   - Click any user to start a private, persistent 1-on-1 Direct Message conversation.
+---
 
-3. **Message Enhancements**:
-   - **Markdown Support**: Bold (`**bold**`), italics (`*italic*`), inline code (` `code` `), and syntax-highlighted code blocks (` ```code``` `).
-   - **Emoji Picker & Reactions**: Inline quick reactions (`👍`, `❤️`, `😂`, `🔥`, `🚀`, `🎉`) with live counters.
-   - **File & Media Attachments**: Upload and preview images directly in chat.
-   - **Typing Indicators**: Real-time notifications when another user is composing a message.
+## 🌟 Implemented Features
 
-4. **Zero-Dependency Sound Synthesizer**:
-   - Custom Web Audio API sound effects for sent and received messages (no external audio files required, toggleable via bell icon).
+### Feature 1: Advanced Message Management
+- **Edit Messages**: Users can edit only their own messages. Displays a pencil `✏️` icon in the message actions bar. Broadcasts `message_edited` via WebSockets and marks message with `(edited)`.
+- **Delete Messages**: Users can delete their own messages (and admins can remove any message). Prompts for confirmation. Implements soft-deletion in SQLite (`is_deleted = 1`), broadcasts `message_deleted`, and ensures deleted messages never reappear upon refreshing.
+- **Reply to Messages**: Click `↩️` on any message to trigger a quoted preview above the textarea. Saves `reply_to_id` in the database. Clicking the quoted preview inside any message card scrolls smoothly to the parent message and flashes a pulse highlight animation.
+- **Forward Messages**: Click `↪️` to open the Forward Modal. Users can pick any channel, group, or DM conversation. Preserves original author attribution with a `↪ Forwarded from [Sender]` banner.
 
-5. **Built-in Automated Assistant (Nova Bot)**:
-   - Mention `@nova` or type `/joke`, `/quote`, or `/help` in any channel to get instant automated responses.
+### Feature 2: Read Receipts & Unread Message Counters
+- **Three-Tier Status Indicators**:
+  - `✓` (Grey single tick): Message sent to server.
+  - `✓✓` (Grey double tick): Message delivered to recipient client session.
+  - `✓✓` (Cyan/blue double tick): Message read by recipient.
+- **Unread Counters**: Dynamic unread badges beside channels, groups, and direct messages in the sidebar. Automatically marks messages as read when opening a conversation and pushes real-time updates via `messages_read` Socket.IO events.
 
-6. **SQLite Persistence (`chat.db`)**:
-   - Robust relational schema with foreign keys for `users`, `rooms`, `messages`, and `reactions`.
-   
-7. **Automated Content Moderation**:
-   - Integrated custom profanity filter (`backend/moderation.py`) that intercepts incoming messages, checks against prohibited terms, and automatically censors bad words (`****`) before database storage and live broadcast.
+### Feature 3: Group Chat
+- **Group Creation**: Create group modal with group name, description, avatar color picker, and user multi-select checklist. Group creator automatically becomes group admin.
+- **Group Management**: Group admin can add and remove members, and edit group info. Members can leave groups.
+- **Group Details Panel**: View members and their online status in the right sidebar panel.
+- **Security**: Strictly prevents unauthorized users from joining or reading private group rooms.
 
-8. **Real-Time Typing Indicator**:
-   - Interactive typing state updates using client-side debouncing and WebSockets, rendering animated typing indicators (`[User] is typing...`) across online clients.
+### Feature 4: Notification Center
+- **Bell Icon with Unread Badge**: Located in the top header.
+- **Notification Types**: Direct messages, group messages, user mentions (`@username`), replies to user messages, group additions, and emoji reactions.
+- **Features**: Mark individual notification as read, "Mark all as read" button, and clicking a notification automatically opens the relevant channel/group/DM and scrolls to the message.
+
+### Feature 5: Admin Dashboard & Analytics
+- **Secure Access**: Protected on backend via `@admin_required` decorator (returns 403 Forbidden to non-admin accounts). Accessible via `/admin` or the shield `🛡️` button in the sidebar footer for admin users.
+- **Metrics Overview**: Total users, active users, total messages, public channels, group chats, and pending reports.
+- **Visual Analytics**: Responsive Chart.js visualizations for daily message volume (last 7 days) and most active channels.
+- **User Management**: Live user search, suspend / reactivate accounts, and promote / demote administrative roles.
+- **Moderation Log**: Full audit log of all administrative actions.
+
+### Feature 6: Advanced Moderation & Message Reporting
+- **Message Reporting**: Users can report messages by clicking the flag `🚩` icon. Supports reasons (`spam`, `harassment`, `abuse`, `inappropriate`, `other`) and optional details. Enforces unique constraints to prevent duplicate reports by the same user.
+- **Admin Review**: Admins can review pending reports from the dashboard and execute actions: Dismiss Report, Delete Inappropriate Message, Warn User, or Suspend Account.
+- **Profanity Filter**: Regex-based tokenization that preserves original message casing, structure, and punctuation while censoring prohibited words with asterisks matching word length.
